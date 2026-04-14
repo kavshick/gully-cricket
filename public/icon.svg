@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0a1a0f"/>
+  <circle cx="256" cy="256" r="180" fill="#0d2914" stroke="#2e7d32" stroke-width="8"/>
+  <!-- Cricket bat -->
+  <rect x="220" y="120" width="48" height="200" rx="12" fill="#b9f6ca"/>
+  <rect x="238" y="310" width="12" height="80" rx="4" fill="#69f0ae"/>
+  <!-- Ball -->
+  <circle cx="330" cy="200" r="36" fill="#e53e3e"/>
+  <path d="M316 175 Q330 162 344 175" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M316 225 Q330 238 344 225" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+</svg>
