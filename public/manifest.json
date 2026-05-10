@@ -1,0 +1,38 @@
+{
+  "name": "Gully Cricket",
+  "short_name": "GullyCricket",
+  "description": "The ultimate gully cricket scoring and stats app",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0f10",
+  "theme_color": "#22c55e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Match",
+      "url": "/teams/generator",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Players",
+      "url": "/players",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
