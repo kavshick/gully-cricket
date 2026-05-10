@@ -40,7 +40,7 @@ export default function WicketModal({ match, innings, rules, onConfirm, onClose 
 
   const bowlingTeamPlayers = innings.bowling_team.players
 
-  const dismissalTypes: { value: DismissalType; label: string; enabled: boolean }[] = [
+  const dismissalTypes = [
     { value: 'bowled', label: '🏏 Bowled', enabled: true },
     { value: 'caught', label: '🙌 Caught', enabled: true },
     { value: 'run_out', label: '🏃 Run Out', enabled: true },
@@ -51,7 +51,7 @@ export default function WicketModal({ match, innings, rules, onConfirm, onClose 
     { value: 'one_tip_one_hand', label: '✋ One Tip One Hand', enabled: rules.one_tip_one_hand_enabled },
     { value: 'direct_six_out', label: '🚀 Direct Six Out', enabled: rules.direct_six_out_enabled },
     { value: 'roof_catch', label: '🏠 Roof Catch', enabled: rules.roof_catch_enabled },
-  ].filter(d => d.enabled)
+  ] as const satisfies ReadonlyArray<{ value: DismissalType; label: string; enabled: boolean }>
 
   const needsFielder = wicketType === 'caught' || wicketType === 'run_out' ||
     wicketType === 'caught_behind' || wicketType === 'one_tip_one_hand' ||
@@ -115,7 +115,7 @@ export default function WicketModal({ match, innings, rules, onConfirm, onClose 
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">How out?</p>
             <div className="grid grid-cols-2 gap-2">
-              {dismissalTypes.map(d => (
+              {dismissalTypes.filter(d => d.enabled).map(d => (
                 <motion.button
                   key={d.value}
                   whileTap={{ scale: 0.96 }}
@@ -161,10 +161,10 @@ export default function WicketModal({ match, innings, rules, onConfirm, onClose 
           {wicketType === 'run_out' && (
             <div>
               <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
-                Runs before run-out
+                Legal runs before run-out
               </p>
               <div className="flex gap-2">
-                {[0, 1, 2, 3].map(r => (
+                {[0, 1, 2, 3, 4, 5, 6].map(r => (
                   <button
                     key={r}
                     onClick={() => setRunsBeforeWicket(r)}

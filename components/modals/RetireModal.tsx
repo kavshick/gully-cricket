@@ -11,9 +11,10 @@ interface RetireModalProps {
   match: Match
   innings: InningsState
   onClose: () => void
+  onRetired?: (retiredPlayerId: string) => void
 }
 
-export default function RetireModal({ match, innings, onClose }: RetireModalProps) {
+export default function RetireModal({ match, innings, onClose, onRetired }: RetireModalProps) {
   const { retireBatsman, returnBatsman } = useMatchStore()
   const [tab, setTab] = useState<'retire' | 'return'>('retire')
   const [selectedRetire, setSelectedRetire] = useState<string | null>(null)
@@ -36,6 +37,7 @@ export default function RetireModal({ match, innings, onClose }: RetireModalProp
       retireBatsman(selectedRetire, 'voluntary')
       toast.success('Batsman retired — can return later')
     }
+    onRetired?.(selectedRetire)
     onClose()
   }
 

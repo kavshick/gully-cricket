@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ChevronLeft, Trophy, Calendar } from 'lucide-react'
-import { formatOvers } from '@/scoring/engine'
+import { ChevronLeft, Trophy, Calendar, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface MatchSummary {
   id: string
@@ -20,13 +20,55 @@ interface MatchSummary {
 export default function MatchHistoryPage() {
   const [matches, setMatches] = useState<MatchSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
+
+  async function fetchHistory() {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/matches?status=completed')
+      const d = await r.json()
+      setMatches(Array.isArray(d) ? d : [])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    fetch('/api/matches?status=completed')
-      .then(r => r.json())
-      .then(d => { setMatches(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(() => setLoading(false))
+    fetchHistory()
   }, [])
+
+  async function handleDeleteMatch(matchId: string) {
+    const ok = window.confirm('Delete this match from history?')
+    if (!ok) return
+    setDeletingId(matchId)
+    try {
+      const res = await fetch(`/api/matches/${matchId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      setMatches(prev => prev.filter(m => m.id !== matchId))
+      toast.success('Match deleted')
+    } catch {
+      toast.error('Failed to delete match')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function handleClearAll() {
+    const ok = window.confirm('Delete all completed match history? This cannot be undone.')
+    if (!ok) return
+    setClearingAll(true)
+    try {
+      const res = await fetch('/api/matches?status=completed', { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      setMatches([])
+      toast.success('Match history cleared')
+    } catch {
+      toast.error('Failed to clear history')
+    } finally {
+      setClearingAll(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface-950 text-white">
@@ -41,6 +83,15 @@ export default function MatchHistoryPage() {
             <h1 className="font-display text-xl font-bold">Match History</h1>
             <p className="text-xs text-zinc-500">{matches.length} completed matches</p>
           </div>
+          {matches.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              disabled={clearingAll}
+              className="ml-auto px-3 py-2 rounded-xl bg-red-900/25 border border-red-700/40 text-red-300 text-xs font-semibold disabled:opacity-50"
+            >
+              {clearingAll ? 'Clearing...' : 'Clear All'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -100,6 +151,16 @@ export default function MatchHistoryPage() {
                   }`}>
                     {match.status}
                   </span>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={() => handleDeleteMatch(match.id)}
+                    disabled={deletingId === match.id}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-900/25 border border-red-700/40 text-red-300 text-xs font-semibold disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                    {deletingId === match.id ? 'Deleting...' : 'Delete'}
+                  </button>
                 </div>
               </motion.div>
             ))}

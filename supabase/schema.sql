@@ -1,17 +1,31 @@
 -- ============================================================
--- GULLY CRICKET - COMPLETE DATABASE SCHEMA
--- Run this in your Supabase SQL editor
+-- GULLY CRICKET - CLEAN RESET SCHEMA (NO LOGIN REQUIRED)
+-- Run this in Supabase SQL Editor
 -- ============================================================
 
--- Enable UUID extension
+-- ============================================================
+-- DROP EXISTING OBJECTS
+-- ============================================================
+DROP VIEW IF EXISTS public.player_analytics;
+
+DROP TABLE IF EXISTS public.player_stats CASCADE;
+DROP TABLE IF EXISTS public.balls CASCADE;
+DROP TABLE IF EXISTS public.matches CASCADE;
+DROP TABLE IF EXISTS public.players CASCADE;
+
+DROP FUNCTION IF EXISTS update_updated_at() CASCADE;
+
+-- ============================================================
+-- ENABLE EXTENSION
+-- ============================================================
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================
 -- PLAYERS TABLE
 -- ============================================================
-CREATE TABLE IF NOT EXISTS public.players (
+CREATE TABLE public.players (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID,
   name TEXT NOT NULL,
   nickname TEXT,
   batting_skill INTEGER NOT NULL DEFAULT 5 CHECK (batting_skill BETWEEN 1 AND 10),
@@ -39,9 +53,9 @@ CREATE TABLE IF NOT EXISTS public.players (
 -- ============================================================
 -- MATCHES TABLE
 -- ============================================================
-CREATE TABLE IF NOT EXISTS public.matches (
+CREATE TABLE public.matches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID,
   state JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'setup' CHECK (status IN ('setup', 'toss', 'live', 'innings_break', 'completed')),
   team_a_name TEXT,
@@ -56,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.matches (
 -- ============================================================
 -- BALLS TABLE
 -- ============================================================
-CREATE TABLE IF NOT EXISTS public.balls (
+CREATE TABLE public.balls (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   match_id UUID REFERENCES public.matches(id) ON DELETE CASCADE,
   innings INTEGER NOT NULL CHECK (innings IN (1, 2)),
@@ -78,7 +92,7 @@ CREATE TABLE IF NOT EXISTS public.balls (
 -- ============================================================
 -- PLAYER STATS TABLE
 -- ============================================================
-CREATE TABLE IF NOT EXISTS public.player_stats (
+CREATE TABLE public.player_stats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   player_id UUID REFERENCES public.players(id) ON DELETE CASCADE,
   match_id UUID REFERENCES public.matches(id) ON DELETE CASCADE,
@@ -101,13 +115,13 @@ CREATE TABLE IF NOT EXISTS public.player_stats (
 -- ============================================================
 -- INDEXES
 -- ============================================================
-CREATE INDEX IF NOT EXISTS idx_players_user_id ON public.players(user_id);
-CREATE INDEX IF NOT EXISTS idx_matches_user_id ON public.matches(user_id);
-CREATE INDEX IF NOT EXISTS idx_matches_status ON public.matches(status);
-CREATE INDEX IF NOT EXISTS idx_balls_match_id ON public.balls(match_id);
-CREATE INDEX IF NOT EXISTS idx_balls_innings ON public.balls(match_id, innings);
-CREATE INDEX IF NOT EXISTS idx_player_stats_player_id ON public.player_stats(player_id);
-CREATE INDEX IF NOT EXISTS idx_player_stats_match_id ON public.player_stats(match_id);
+CREATE INDEX idx_players_user_id ON public.players(user_id);
+CREATE INDEX idx_matches_user_id ON public.matches(user_id);
+CREATE INDEX idx_matches_status ON public.matches(status);
+CREATE INDEX idx_balls_match_id ON public.balls(match_id);
+CREATE INDEX idx_balls_innings ON public.balls(match_id, innings);
+CREATE INDEX idx_player_stats_player_id ON public.player_stats(player_id);
+CREATE INDEX idx_player_stats_match_id ON public.player_stats(match_id);
 
 -- ============================================================
 -- UPDATED_AT TRIGGER
@@ -129,60 +143,12 @@ CREATE TRIGGER matches_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ============================================================
--- ROW LEVEL SECURITY
+-- NO-LOGIN MODE: DISABLE RLS
 -- ============================================================
-ALTER TABLE public.players ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.matches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.balls ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.player_stats ENABLE ROW LEVEL SECURITY;
-
--- Players RLS: users can CRUD their own players
-CREATE POLICY "players_select_own" ON public.players
-  FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "players_insert_own" ON public.players
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "players_update_own" ON public.players
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "players_delete_own" ON public.players
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Matches RLS: users can CRUD their own matches
-CREATE POLICY "matches_select_own" ON public.matches
-  FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "matches_insert_own" ON public.matches
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "matches_update_own" ON public.matches
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "matches_delete_own" ON public.matches
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Balls RLS: accessible if you own the match
-CREATE POLICY "balls_select_own" ON public.balls
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
-CREATE POLICY "balls_insert_own" ON public.balls
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
-CREATE POLICY "balls_delete_own" ON public.balls
-  FOR DELETE USING (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
-
--- Player Stats RLS
-CREATE POLICY "player_stats_select_own" ON public.player_stats
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
-CREATE POLICY "player_stats_insert_own" ON public.player_stats
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
-CREATE POLICY "player_stats_update_own" ON public.player_stats
-  FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.matches WHERE id = match_id AND user_id = auth.uid())
-  );
+ALTER TABLE public.players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.matches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.balls DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.player_stats DISABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- ANALYTICS VIEW
@@ -191,6 +157,7 @@ CREATE OR REPLACE VIEW public.player_analytics AS
 SELECT
   p.id AS player_id,
   p.name,
+  p.nickname,
   p.user_id,
   COUNT(DISTINCT ps.match_id) AS total_matches,
   COALESCE(SUM(ps.runs_scored), 0) AS total_runs,
@@ -218,7 +185,29 @@ SELECT
   END AS batting_average
 FROM public.players p
 LEFT JOIN public.player_stats ps ON p.id = ps.player_id
-GROUP BY p.id, p.name, p.user_id;
+GROUP BY p.id, p.name, p.nickname, p.user_id;
 
--- Grant access to view
-GRANT SELECT ON public.player_analytics TO authenticated;
+GRANT SELECT ON public.player_analytics TO anon, authenticated;
+
+-- ============================================================
+-- SEED PLAYERS
+-- ============================================================
+INSERT INTO public.players (user_id, name, nickname, preferred_role, batting_skill, bowling_skill, fielding_skill)
+VALUES
+  (NULL, 'Darshan', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Kavshick', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Sai', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Satvik', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Jayan', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Rathish', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Prasanna', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Hari', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Gopi', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Vishnu', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Sanjai', 'Tall', 'allrounder', 5, 5, 5),
+  (NULL, 'Sanjai', 'Short', 'allrounder', 5, 5, 5),
+  (NULL, 'Vishal', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Siva', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Venkat', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Manish', NULL, 'allrounder', 5, 5, 5),
+  (NULL, 'Sriram', NULL, 'allrounder', 5, 5, 5);

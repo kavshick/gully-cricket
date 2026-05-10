@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import type { Match, InningsState, Player } from '@/types'
-import { formatOvers, BALLS_PER_OVER } from '@/scoring/engine'
+import { formatOvers } from '@/scoring/engine'
 
 interface SelectBowlerModalProps {
   match: Match
@@ -18,6 +18,7 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
 
   const currentBowler = innings.bowler?.player
   const bowlingTeamPlayers = innings.bowling_team.players
+  const currentBatsmenIds = new Set(innings.batsmen.map(b => b.player.id))
 
   // Track overs bowled per player from balls
   const oversByBowler: Record<string, number> = {}
@@ -29,6 +30,12 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
 
   const avatarColor = (name: string) =>
     `hsl(${(name.charCodeAt(0) * 37) % 360}, 60%, 40%)`
+  const getCommonName = (player: Player) =>
+    player.nickname || (player as Player & { common_name?: string }).common_name
+  const displayName = (player: Player) => {
+    const commonName = getCommonName(player)
+    return commonName ? `${player.name} (${commonName})` : player.name
+  }
 
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-end justify-center">
@@ -37,7 +44,7 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-lg bg-surface-900 rounded-t-3xl overflow-hidden"
+        className="w-full max-w-lg bg-surface-900 rounded-t-3xl overflow-hidden flex flex-col"
         style={{ maxHeight: '80vh' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
@@ -50,7 +57,7 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-2 pb-8">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-2 pb-8">
           {bowlingTeamPlayers.map(p => {
             const legalBalls = oversByBowler[p.id] || 0
             const overs = formatOvers(legalBalls)
@@ -67,6 +74,7 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
               ? ((runsConceded / legalBalls) * 6).toFixed(1)
               : '—'
             const isCurrent = currentBowler?.id === p.id
+            const isBatting = currentBatsmenIds.has(p.id)
             const isSelected = selected?.id === p.id
 
             return (
@@ -74,9 +82,9 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
                 key={p.id}
                 whileTap={{ scale: 0.97 }}
                 onClick={() => setSelected(isSelected ? null : p)}
-                disabled={isCurrent}
+                disabled={isCurrent || isBatting}
                 className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${
-                  isCurrent
+                  isCurrent || isBatting
                     ? 'bg-white/5 border-white/5 opacity-40 cursor-not-allowed'
                     : isSelected
                     ? 'bg-pitch-900/40 border-pitch-500'
@@ -91,10 +99,15 @@ export default function SelectBowlerModal({ match, innings, onSelect, onClose }:
                 </div>
                 <div className="flex-1 text-left">
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-sm">{p.name}</p>
+                    <p className="font-semibold text-sm">{displayName(p)}</p>
                     {isCurrent && (
                       <span className="text-xs text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full">
                         Current
+                      </span>
+                    )}
+                    {isBatting && (
+                      <span className="text-xs text-zinc-500 bg-white/5 px-2 py-0.5 rounded-full">
+                        Batting
                       </span>
                     )}
                   </div>

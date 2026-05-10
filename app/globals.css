@@ -24,7 +24,7 @@
   }
 
   * {
-    @apply border-border;
+    border-color: var(--color-border);
     box-sizing: border-box;
   }
 

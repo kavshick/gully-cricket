@@ -3,36 +3,71 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, Shuffle, ArrowRight, Users, Star, CheckCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ChevronLeft, Shuffle, CheckCircle } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import { useMatchSetupStore } from '@/store/settingsStore'
 import { toast } from 'sonner'
-import type { Player } from '@/types'
 
 export default function TeamGeneratorPage() {
   const router = useRouter()
-  const { players, fetchPlayers, isLoading } = usePlayerStore()
-  const { setSelectedPlayers, setCommonPlayer, setTeamBalance, selected_players, common_player_id } = useMatchSetupStore()
+  const { players, fetchPlayers, isLoading, addPlayer } = usePlayerStore()
+  const { setSelectedPlayers, setCommonPlayer, setTeamBalance, selected_players } = useMatchSetupStore()
 
   const [selected, setSelected] = useState<Set<string>>(new Set(selected_players))
-  const [commonId, setCommonId] = useState<string | undefined>(common_player_id)
   const [generating, setGenerating] = useState(false)
-  const [step, setStep] = useState<'select' | 'common'>('select')
+  const [newName, setNewName] = useState('')
+  const [newNickname, setNewNickname] = useState('')
+  const [addingPlayer, setAddingPlayer] = useState(false)
 
   useEffect(() => { fetchPlayers() }, [])
 
   function togglePlayer(id: string) {
     setSelected(prev => {
       const next = new Set(prev)
-      if (next.has(id)) { next.delete(id); if (commonId === id) setCommonId(undefined) }
+      if (next.has(id)) { next.delete(id) }
       else next.add(id)
       return next
     })
   }
 
-  function toggleCommon(id: string) {
-    setCommonId(prev => prev === id ? undefined : id)
+  async function handleQuickAddPlayer() {
+    if (!newName.trim()) {
+      toast.error('Enter player name')
+      return
+    }
+    setAddingPlayer(true)
+    try {
+      const player = await addPlayer({
+        name: newName.trim(),
+        nickname: newNickname.trim() || undefined,
+        preferred_role: 'allrounder',
+        batting_skill: 5,
+        bowling_skill: 5,
+        fielding_skill: 5,
+        matches_played: 0,
+        total_runs: 0,
+        total_wickets: 0,
+        strike_rate: 0,
+        economy: 0,
+        catches: 0,
+        run_outs: 0,
+        mvps: 0,
+        wins: 0,
+        losses: 0,
+        ai_balance_score: 5,
+        form_trend: 'stable',
+        clutch_factor: 5,
+      })
+      setSelected(prev => new Set([...Array.from(prev), player.id]))
+      setNewName('')
+      setNewNickname('')
+      toast.success('Player added with default stats')
+    } catch {
+      toast.error('Failed to add player')
+    } finally {
+      setAddingPlayer(false)
+    }
   }
 
   async function generateTeams() {
@@ -40,14 +75,13 @@ export default function TeamGeneratorPage() {
     setGenerating(true)
     try {
       setSelectedPlayers(Array.from(selected))
-      setCommonPlayer(commonId)
+      setCommonPlayer(undefined)
 
       const res = await fetch('/api/teams/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           player_ids: Array.from(selected),
-          common_player_id: commonId,
           team_a_name: 'Team A',
           team_b_name: 'Team B',
         }),
@@ -55,6 +89,7 @@ export default function TeamGeneratorPage() {
       if (!res.ok) throw new Error('Failed to generate teams')
       const balance = await res.json()
       setTeamBalance(balance)
+      setCommonPlayer(balance.common_player_id)
       router.push('/teams/balance')
     } catch (e: any) {
       toast.error(e.message || 'Failed to generate teams')
@@ -63,11 +98,12 @@ export default function TeamGeneratorPage() {
     }
   }
 
-  const selectedPlayers = players.filter(p => selected.has(p.id))
   const isOddCount = selected.size % 2 !== 0
 
   const avatarColor = (name: string) =>
     `hsl(${(name.charCodeAt(0) * 37) % 360}, 60%, 40%)`
+  const displayName = (name: string, nickname?: string) =>
+    nickname ? `${name} (${nickname})` : name
 
   return (
     <div className="min-h-screen bg-surface-950 text-white flex flex-col">
@@ -81,48 +117,26 @@ export default function TeamGeneratorPage() {
           </Link>
           <div className="flex-1">
             <h1 className="font-display text-xl font-bold">
-              {step === 'select' ? 'Select Players' : 'Common Player?'}
+              Select Players
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {step === 'select'
-                ? `${selected.size} selected${isOddCount ? ' (odd — one can be common)' : ''}`
-                : 'Optional: one player who bats/bowls for both teams'}
+              {`${selected.size} selected${isOddCount ? ' (odd count: common player auto-randomized)' : ''}`}
             </p>
           </div>
-          {step === 'select' && (
-            <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-pitch-900/50 text-pitch-300">
-              {selected.size}/{players.length}
-            </span>
-          )}
-        </div>
-
-        {/* Step tabs */}
-        <div className="flex gap-2 mt-3">
-          {['select', 'common'].map((s, i) => (
-            <button
-              key={s}
-              onClick={() => { if (s === 'common' && selected.size < 2) return; setStep(s as any) }}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
-                step === s ? 'bg-pitch-600 text-white' : 'bg-white/5 text-zinc-500'
-              }`}
-            >
-              {i + 1}. {s === 'select' ? 'Select Players' : 'Common Player'}
-            </button>
-          ))}
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-pitch-900/50 text-pitch-300">
+            {selected.size}/{players.length}
+          </span>
         </div>
       </div>
 
       {/* Player list */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
-        <AnimatePresence mode="wait">
-          {step === 'select' ? (
-            <motion.div
-              key="select"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="space-y-2"
-            >
+        <motion.div
+          key="select"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="space-y-2"
+        >
               {/* Select All */}
               <button
                 onClick={() => {
@@ -133,6 +147,31 @@ export default function TeamGeneratorPage() {
               >
                 {selected.size === players.length ? 'Deselect All' : 'Select All'}
               </button>
+
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                <p className="text-xs text-zinc-400">Quick add player (default stats: all 5, totals 0)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="Player name"
+                    className="px-3 py-2.5 rounded-xl bg-surface-900 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-pitch-500"
+                  />
+                  <input
+                    value={newNickname}
+                    onChange={e => setNewNickname(e.target.value)}
+                    placeholder="Nickname (optional)"
+                    className="px-3 py-2.5 rounded-xl bg-surface-900 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-pitch-500"
+                  />
+                </div>
+                <button
+                  onClick={handleQuickAddPlayer}
+                  disabled={addingPlayer || !newName.trim()}
+                  className="w-full py-2.5 rounded-xl bg-pitch-700 hover:bg-pitch-600 transition-colors text-sm font-semibold disabled:opacity-50"
+                >
+                  {addingPlayer ? 'Adding...' : 'Add Player'}
+                </button>
+              </div>
 
               {isLoading ? (
                 [...Array(6)].map((_, i) => (
@@ -170,7 +209,7 @@ export default function TeamGeneratorPage() {
                         )}
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-semibold text-sm">{player.name}</p>
+                        <p className="font-semibold text-sm">{displayName(player.name, player.nickname)}</p>
                         <p className="text-xs text-zinc-500 capitalize">
                           {player.preferred_role} • AI: {player.ai_balance_score}
                         </p>
@@ -183,95 +222,26 @@ export default function TeamGeneratorPage() {
                   )
                 })
               )}
-            </motion.div>
-          ) : (
-            <motion.div
-              key="common"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-2"
-            >
-              <p className="text-sm text-zinc-400 mb-4">
-                A common player bats and bowls for both teams — great when you have an odd number of players.
-              </p>
-              <button
-                onClick={() => setCommonId(undefined)}
-                className={`w-full flex items-center gap-3 p-4 rounded-2xl border transition-all ${
-                  !commonId ? 'bg-pitch-900/30 border-pitch-600/50' : 'bg-white/5 border-white/10'
-                }`}
-              >
-                <div className="w-11 h-11 rounded-2xl bg-zinc-700 flex items-center justify-center">
-                  <Users size={20} className="text-zinc-400" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="font-semibold text-sm">No Common Player</p>
-                  <p className="text-xs text-zinc-500">Standard match format</p>
-                </div>
-                {!commonId && <CheckCircle size={18} className="text-pitch-400" />}
-              </button>
-
-              {selectedPlayers.map(player => (
-                <motion.button
-                  key={player.id}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => toggleCommon(player.id)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all ${
-                    commonId === player.id
-                      ? 'bg-purple-900/30 border-purple-600/50'
-                      : 'bg-white/5 border-white/10'
-                  }`}
-                >
-                  <div
-                    className="w-11 h-11 rounded-2xl flex items-center justify-center font-display font-bold text-sm text-white"
-                    style={{ background: avatarColor(player.name) }}
-                  >
-                    {player.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <p className="font-semibold text-sm">{player.name}</p>
-                    <p className="text-xs text-zinc-500">AI Score: {player.ai_balance_score}</p>
-                  </div>
-                  {commonId === player.id && <CheckCircle size={18} className="text-purple-400" />}
-                </motion.button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </motion.div>
       </div>
 
       {/* Bottom Action */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface-950/95 backdrop-blur-md border-t border-white/5">
-        {step === 'select' ? (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => {
-              if (selected.size < 2) { toast.error('Select at least 2 players'); return }
-              setStep('common')
-            }}
-            className="w-full py-4 rounded-2xl bg-pitch-600 text-white font-display font-bold text-base flex items-center justify-center gap-2 disabled:opacity-40"
-            disabled={selected.size < 2}
-          >
-            Next: Common Player
-            <ArrowRight size={18} />
-          </motion.button>
-        ) : (
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={generateTeams}
-            disabled={generating}
-            className="w-full py-4 rounded-2xl bg-pitch-600 text-white font-display font-bold text-base flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(34,197,94,0.3)] disabled:opacity-50"
-          >
-            {generating ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                <Shuffle size={18} />
-                Generate Balanced Teams
-              </>
-            )}
-          </motion.button>
-        )}
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={generateTeams}
+          disabled={generating || selected.size < 2}
+          className="w-full py-4 rounded-2xl bg-pitch-600 text-white font-display font-bold text-base flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(34,197,94,0.3)] disabled:opacity-50"
+        >
+          {generating ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <>
+              <Shuffle size={18} />
+              Generate Balanced Teams
+            </>
+          )}
+        </motion.button>
       </div>
     </div>
   )

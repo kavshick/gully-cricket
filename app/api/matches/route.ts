@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/supabase/server'
+import { createServiceRoleClient } from '@/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const supabase = createServiceRoleClient()
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
@@ -13,7 +11,6 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('matches')
       .select('id, status, team_a_name, team_b_name, winner_team, total_overs, created_at, completed_at')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -30,9 +27,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const supabase = createServiceRoleClient()
 
     const body = await request.json()
     const { match } = body
@@ -40,7 +35,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('matches')
       .insert({
-        user_id: user.id,
+        user_id: null,
         state: match,
         status: match.status,
         team_a_name: match.team_a?.name,
@@ -53,6 +48,25 @@ export async function POST(request: NextRequest) {
     if (error) throw error
 
     return NextResponse.json(data, { status: 201 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = createServiceRoleClient()
+
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+
+    let query = supabase.from('matches').delete()
+    if (status) query = query.eq('status', status)
+
+    const { error } = await query
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

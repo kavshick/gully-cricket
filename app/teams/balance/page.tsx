@@ -11,6 +11,10 @@ import { shuffleTeams, swapPlayerBetweenTeams } from '@/balancing/engine'
 import { toast } from 'sonner'
 import type { Player, Team } from '@/types'
 
+function getDisplayName(player: Pick<Player, 'name' | 'nickname'>): string {
+  return player.nickname ? `${player.name} (${player.nickname})` : player.name
+}
+
 function TeamColumn({
   team,
   label,
@@ -56,7 +60,7 @@ function TeamColumn({
                 {player.name.slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 text-left min-w-0">
-                <p className="text-xs font-semibold truncate">{player.name}</p>
+                <p className="text-xs font-semibold truncate">{getDisplayName(player)}</p>
                 {player.id === team.captain?.id && (
                   <p className="text-xs text-yellow-400">👑 Captain</p>
                 )}
@@ -71,7 +75,7 @@ function TeamColumn({
 
 export default function TeamBalancePage() {
   const router = useRouter()
-  const { team_balance, setTeamBalance, selected_players, common_player_id } = useMatchSetupStore()
+  const { team_balance, setTeamBalance, selected_players, common_player_id, setCommonPlayer } = useMatchSetupStore()
   const { players } = usePlayerStore()
   const [selectedForSwap, setSelectedForSwap] = useState<{ id: string; side: 'a' | 'b' } | null>(null)
   const [shuffling, setShuffling] = useState(false)
@@ -88,6 +92,12 @@ export default function TeamBalancePage() {
   }
 
   const { team_a, team_b, fairness_percentage, team_a_win_probability, team_b_win_probability } = team_balance
+  const commonPlayer =
+    common_player_id
+      ? players.find(p => p.id === common_player_id)
+        || team_a.players.find(p => p.id === common_player_id)
+        || team_b.players.find(p => p.id === common_player_id)
+      : null
 
   async function handleShuffle() {
     setShuffling(true)
@@ -129,13 +139,14 @@ export default function TeamBalancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           player_ids: allIds,
-          common_player_id,
           team_a_name: team_a.name,
           team_b_name: team_b.name,
         }),
       })
       if (!res.ok) throw new Error()
-      setTeamBalance(await res.json())
+      const balance = await res.json()
+      setTeamBalance(balance)
+      setCommonPlayer(balance.common_player_id)
       setSelectedForSwap(null)
     } catch {
       toast.error('Failed to regenerate')
@@ -245,6 +256,22 @@ export default function TeamBalancePage() {
           </motion.div>
         )}
 
+        {/* Common player info (odd player count mode) */}
+        {common_player_id && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3 rounded-xl bg-blue-900/20 border border-blue-500/30 text-sm"
+          >
+            <p className="text-blue-300">
+              Common Player:{' '}
+              <span className="font-semibold text-white">
+                {commonPlayer ? getDisplayName(commonPlayer) : 'Unknown'}
+              </span>
+            </p>
+          </motion.div>
+        )}
+
         {/* Teams */}
         <div className="flex gap-3">
           <TeamColumn
@@ -285,7 +312,9 @@ export default function TeamBalancePage() {
           {[team_a, team_b].map(team => (
             <div key={team.id} className="p-3 rounded-2xl bg-white/5 border border-white/10">
               <p className="text-xs text-zinc-500 mb-1">👑 {team.name} Captain</p>
-              <p className="font-semibold text-sm">{team.captain?.name || '—'}</p>
+              <p className="font-semibold text-sm">
+                {team.captain ? getDisplayName(team.captain) : '—'}
+              </p>
             </div>
           ))}
         </div>

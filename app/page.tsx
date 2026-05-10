@@ -6,18 +6,14 @@ import { motion } from 'framer-motion'
 import { Trophy, Users, Play, BarChart2, History, Settings, Plus, Zap } from 'lucide-react'
 import { useMatchStore } from '@/store/matchStore'
 import { usePlayerStore } from '@/store/playerStore'
-import { createClient } from '@/supabase/client'
 import { formatOvers } from '@/scoring/engine'
 
 export default function HomePage() {
   const { match } = useMatchStore()
   const { players, fetchPlayers } = usePlayerStore()
-  const [user, setUser] = useState<any>(null)
   const [recentMatches, setRecentMatches] = useState<any[]>([])
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => setUser(data.user))
     fetchPlayers()
     fetchRecentMatches()
   }, [])
@@ -55,7 +51,7 @@ export default function HomePage() {
                 🏏 Gully Cricket
               </h1>
               <p className="text-zinc-400 text-sm mt-1">
-                {user?.email?.split('@')[0] || 'Guest'} • {players.length} players
+                Local Mode • {players.length} players
               </p>
             </div>
             <Link href="/settings">

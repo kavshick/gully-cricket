@@ -16,7 +16,7 @@ import type {
 // SCORING CONSTANTS
 // ============================================================
 export const BALLS_PER_OVER = 6
-export const LEGAL_BALL_TYPES: BallType[] = ['dot', 'run', 'four', 'six', 'wicket', 'bounce']
+export const LEGAL_BALL_TYPES: BallType[] = ['dot', 'run', 'four', 'six', 'wicket']
 export const ILLEGAL_BALL_TYPES: BallType[] = ['wide', 'no_ball']
 
 // ============================================================
@@ -41,7 +41,7 @@ export function getBallRuns(type: BallType, runs: number): number {
     case 'dot':
       return 0
     case 'bounce':
-      return 0 // bounce itself = 0 (unless runs taken)
+      return runs
     case 'run':
       return runs
     default:

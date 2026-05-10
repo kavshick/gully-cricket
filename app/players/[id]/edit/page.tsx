@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ChevronLeft, Save } from 'lucide-react'
@@ -14,6 +14,7 @@ export default function EditPlayerPage() {
   const router = useRouter()
   const { players, updatePlayer } = usePlayerStore()
   const player = players.find(p => p.id === id)
+  const playerId = player?.id
 
   const [name, setName] = useState(player?.name || '')
   const [nickname, setNickname] = useState(player?.nickname || '')
@@ -39,10 +40,11 @@ export default function EditPlayerPage() {
   ]
 
   async function handleSave() {
+    if (!playerId) return
     if (!name.trim()) { toast.error('Name required'); return }
     setSaving(true)
     try {
-      await updatePlayer(player.id, {
+      await updatePlayer(playerId, {
         name: name.trim(),
         nickname: nickname.trim() || undefined,
         batting_skill: batting,

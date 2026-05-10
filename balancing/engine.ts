@@ -193,6 +193,10 @@ export function generateBalancedTeams(
   teamBName = 'Team B'
 ): TeamBalance {
   // Separate common player
+  const commonPlayer = commonPlayerId
+    ? players.find(p => p.id === commonPlayerId)
+    : undefined
+
   const regularPlayers = commonPlayerId
     ? players.filter(p => p.id !== commonPlayerId)
     : players
@@ -206,18 +210,21 @@ export function generateBalancedTeams(
   // Optimize with local search
   const { teamA: optA, teamB: optB } = optimizeBalance(greedyA, greedyB, 100)
 
-  const strengthA = computeTeamStrength(optA)
-  const strengthB = computeTeamStrength(optB)
-  const fairness = computeFairness(optA, optB)
-  const { probA, probB } = computeTeamWinProbability(optA, optB)
+  const finalA = commonPlayer ? [...optA, commonPlayer] : optA
+  const finalB = commonPlayer ? [...optB, commonPlayer] : optB
+
+  const strengthA = computeTeamStrength(finalA)
+  const strengthB = computeTeamStrength(finalB)
+  const fairness = computeFairness(finalA, finalB)
+  const { probA, probB } = computeTeamWinProbability(finalA, finalB)
 
   const teamColors = ['#22c55e', '#3b82f6']
 
   const teamAObj: Team = {
     id: uuidv4(),
     name: teamAName,
-    players: optA,
-    captain: selectCaptain(optA),
+    players: finalA,
+    captain: selectCaptain(finalA),
     strength_score: strengthA.overall,
     batting_strength: strengthA.batting,
     bowling_strength: strengthA.bowling,
@@ -227,8 +234,8 @@ export function generateBalancedTeams(
   const teamBObj: Team = {
     id: uuidv4(),
     name: teamBName,
-    players: optB,
-    captain: selectCaptain(optB),
+    players: finalB,
+    captain: selectCaptain(finalB),
     strength_score: strengthB.overall,
     batting_strength: strengthB.batting,
     bowling_strength: strengthB.bowling,
@@ -242,6 +249,7 @@ export function generateBalancedTeams(
     team_a_win_probability: probA,
     team_b_win_probability: probB,
     balance_score: fairness / 10,
+    common_player_id: commonPlayerId,
   }
 }
 

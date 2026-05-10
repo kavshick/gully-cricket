@@ -95,6 +95,7 @@ export interface TeamBalance {
   team_a_win_probability: number
   team_b_win_probability: number
   balance_score: number
+  common_player_id?: string
 }
 
 // ============================================================

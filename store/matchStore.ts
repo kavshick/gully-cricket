@@ -195,29 +195,69 @@ export const useMatchStore = create<MatchStoreState>()(
               balls_faced: b.balls_faced + 1,
               fours: b.fours + (actualType === 'four' ? 1 : 0),
               sixes: b.sixes + (actualType === 'six' ? 1 : 0),
-              is_out: actualType === 'wicket' ? true : b.is_out,
             }
           }
           return b
         })
+
+        // Update current bowler stats for this delivery
+        let newBowlerState = innings.bowler
+        if (newBowlerState) {
+          const concededRuns = getBallRuns(actualType, runs)
+          const legalDelivery = isLegalBall(actualType)
+          const isBowlerWicket =
+            actualType === 'wicket' &&
+            options.wicketType !== 'run_out'
+
+          const nextBallsInOver = legalDelivery
+            ? newBowlerState.balls_in_current_over + 1
+            : newBowlerState.balls_in_current_over
+
+          newBowlerState = {
+            ...newBowlerState,
+            runs_conceded: newBowlerState.runs_conceded + concededRuns,
+            wickets: newBowlerState.wickets + (isBowlerWicket ? 1 : 0),
+            dots: newBowlerState.dots + (legalDelivery && concededRuns === 0 ? 1 : 0),
+            wides: newBowlerState.wides + (actualType === 'wide' ? 1 : 0),
+            no_balls: newBowlerState.no_balls + (actualType === 'no_ball' ? 1 : 0),
+            overs_bowled:
+              newBowlerState.overs_bowled +
+              (legalDelivery && nextBallsInOver === BALLS_PER_OVER ? 1 : 0),
+            balls_in_current_over:
+              legalDelivery && nextBallsInOver === BALLS_PER_OVER ? 0 : nextBallsInOver,
+          }
+        }
 
         // Handle wicket
         let retiredPlayers = [...innings.retired_players]
         let returnEligible = [...innings.return_eligible_players]
 
         if (actualType === 'wicket' && options.replacementPlayer) {
+          const returningEntry = innings.retired_players.find(
+            r => r.player.id === options.replacementPlayer?.id
+          )
           // Remove out batsman, add replacement
           newBatsmen = newBatsmen.filter(b => b.player.id !== striker.player.id)
-          newBatsmen.push({
-            player: options.replacementPlayer,
-            runs: 0,
-            balls_faced: 0,
-            fours: 0,
-            sixes: 0,
-            is_striker: true,
-            is_retired: false,
-            return_eligible: false,
-          })
+          if (returningEntry) {
+            newBatsmen.push({
+              ...returningEntry,
+              is_striker: true,
+              is_retired: false,
+            })
+            retiredPlayers = retiredPlayers.filter(r => r.player.id !== returningEntry.player.id)
+            returnEligible = returnEligible.filter(p => p.id !== returningEntry.player.id)
+          } else {
+            newBatsmen.push({
+              player: options.replacementPlayer,
+              runs: 0,
+              balls_faced: 0,
+              fours: 0,
+              sixes: 0,
+              is_striker: true,
+              is_retired: false,
+              return_eligible: false,
+            })
+          }
         }
 
         // Handle strike rotation
@@ -232,7 +272,9 @@ export const useMatchStore = create<MatchStoreState>()(
         let newBounceThisOver = type === 'bounce' ? bounceCount : innings.bounce_this_over
         let overCommentary: CommentaryEntry | null = null
 
-        if (newScore.rem_balls === 0 && newScore.full_overs > innings.score.full_overs) {
+        const overCompleted = newScore.rem_balls === 0 && newScore.full_overs > innings.score.full_overs
+
+        if (overCompleted) {
           // Over complete — rotate strike
           newBatsmen = newBatsmen.map(b => ({ ...b, is_striker: !b.is_striker }))
           newBounceThisOver = 0 // reset bounce count for new over
@@ -256,11 +298,32 @@ export const useMatchStore = create<MatchStoreState>()(
           ...(overCommentary ? [overCommentary] : []),
         ]
 
+        let nextBowler = innings.bowler
+        const conflictedBowlerId = nextBowler?.player.id
+        if (conflictedBowlerId && newBatsmen.some(b => b.player.id === conflictedBowlerId)) {
+          const alternateBowler = innings.bowling_team.players.find(p => p.id !== conflictedBowlerId)
+          if (alternateBowler) {
+            nextBowler = {
+              player: alternateBowler,
+              overs_bowled: 0,
+              balls_in_current_over: 0,
+              runs_conceded: 0,
+              wickets: 0,
+              dots: 0,
+              wides: 0,
+              no_balls: 0,
+            }
+          } else {
+            nextBowler = null
+          }
+        }
+
         const updatedInnings: InningsState = {
           ...innings,
           balls: newBalls,
           score: newScore,
           batsmen: newBatsmen,
+          bowler: overCompleted ? null : (newBowlerState ?? nextBowler),
           retired_players: retiredPlayers,
           return_eligible_players: returnEligible,
           bounce_this_over: newBounceThisOver,
@@ -356,20 +419,61 @@ export const useMatchStore = create<MatchStoreState>()(
         const innings = match.innings === 1 ? match.innings1 : match.innings2
         if (!innings) return
 
+        const returningEntry = innings.retired_players.find(r => r.player.id === inPlayer.id)
+        const incomingBatsman = returningEntry
+          ? {
+              ...returningEntry,
+              is_striker: true,
+              is_retired: false,
+            }
+          : {
+              player: inPlayer,
+              runs: 0,
+              balls_faced: 0,
+              fours: 0,
+              sixes: 0,
+              is_striker: true,
+              is_retired: false,
+              return_eligible: false,
+            }
+
         const newBatsmen = innings.batsmen
           .filter(b => b.player.id !== outPlayerId)
-          .concat([{
-            player: inPlayer,
-            runs: 0,
-            balls_faced: 0,
-            fours: 0,
-            sixes: 0,
-            is_striker: true,
-            is_retired: false,
-            return_eligible: false,
-          }])
+          .concat([incomingBatsman])
 
-        const updatedInnings = { ...innings, batsmen: newBatsmen }
+        const newRetiredPlayers = returningEntry
+          ? innings.retired_players.filter(r => r.player.id !== inPlayer.id)
+          : innings.retired_players
+        const newReturnEligible = returningEntry
+          ? innings.return_eligible_players.filter(p => p.id !== inPlayer.id)
+          : innings.return_eligible_players
+
+        let nextBowler = innings.bowler
+        if (nextBowler?.player.id === inPlayer.id) {
+          const alternateBowler = innings.bowling_team.players.find(p => p.id !== inPlayer.id)
+          if (alternateBowler) {
+            nextBowler = {
+              player: alternateBowler,
+              overs_bowled: 0,
+              balls_in_current_over: 0,
+              runs_conceded: 0,
+              wickets: 0,
+              dots: 0,
+              wides: 0,
+              no_balls: 0,
+            }
+          } else {
+            nextBowler = null
+          }
+        }
+
+        const updatedInnings = {
+          ...innings,
+          batsmen: newBatsmen,
+          bowler: nextBowler,
+          retired_players: newRetiredPlayers,
+          return_eligible_players: newReturnEligible,
+        }
 
         set({
           match: {
@@ -484,6 +588,7 @@ export const useMatchStore = create<MatchStoreState>()(
 
         const innings = match.innings === 1 ? match.innings1 : match.innings2
         if (!innings) return
+        if (innings.batsmen.some(b => b.player.id === player.id)) return
 
         const newBowler = {
           player,

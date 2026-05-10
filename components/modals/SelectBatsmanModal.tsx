@@ -32,6 +32,12 @@ export default function SelectBatsmanModal({
 
   const avatarColor = (name: string) =>
     `hsl(${(name.charCodeAt(0) * 37) % 360}, 60%, 40%)`
+  const getCommonName = (player: Player) =>
+    player.nickname || (player as Player & { common_name?: string }).common_name
+  const displayName = (player: Player) => {
+    const commonName = getCommonName(player)
+    return commonName ? `${player.name} (${commonName})` : player.name
+  }
 
   function handleConfirm() {
     if (!striker) return
@@ -47,7 +53,7 @@ export default function SelectBatsmanModal({
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="w-full max-w-lg bg-surface-900 rounded-t-3xl overflow-hidden"
+        className="w-full max-w-lg bg-surface-900 rounded-t-3xl overflow-hidden flex flex-col"
         style={{ maxHeight: '85vh' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
@@ -66,7 +72,7 @@ export default function SelectBatsmanModal({
           )}
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-5 pb-8">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5 pb-8">
           {/* Striker selection */}
           <div>
             <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
@@ -95,7 +101,7 @@ export default function SelectBatsmanModal({
                     {p.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 text-left">
-                    <p className="font-semibold text-sm">{p.name}</p>
+                    <p className="font-semibold text-sm">{displayName(p)}</p>
                     <p className="text-xs text-zinc-500 capitalize">{p.preferred_role} • SR: {p.strike_rate || 0}</p>
                   </div>
                   {striker?.id === p.id && (
@@ -129,7 +135,7 @@ export default function SelectBatsmanModal({
                         {p.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex-1 text-left">
-                        <p className="font-semibold text-sm">{p.name}</p>
+                        <p className="font-semibold text-sm">{displayName(p)}</p>
                         <p className="text-xs text-yellow-500">Returned from retirement</p>
                       </div>
                     </motion.button>
@@ -167,7 +173,7 @@ export default function SelectBatsmanModal({
                       {p.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 text-left">
-                      <p className="font-semibold text-sm">{p.name}</p>
+                      <p className="font-semibold text-sm">{displayName(p)}</p>
                       <p className="text-xs text-zinc-500 capitalize">{p.preferred_role}</p>
                     </div>
                     {nonStriker?.id === p.id && (

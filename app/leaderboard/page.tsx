@@ -10,6 +10,7 @@ type Category = 'runs' | 'wickets' | 'strike_rate' | 'economy' | 'matches'
 interface LeaderboardPlayer {
   player_id: string
   name: string
+  nickname?: string | null
   total_runs: number
   total_wickets: number
   batting_strike_rate: number
@@ -48,6 +49,13 @@ export default function LeaderboardPage() {
   })
 
   const medalEmojis = ['🥇', '🥈', '🥉']
+  const nameFrequency = sorted.reduce<Record<string, number>>((acc, p) => {
+    acc[p.name] = (acc[p.name] || 0) + 1
+    return acc
+  }, {})
+
+  const getDisplayName = (player: LeaderboardPlayer) =>
+    player.nickname ? `${player.name} (${player.nickname})` : player.name
 
   return (
     <div className="min-h-screen bg-surface-950 text-white">
@@ -122,7 +130,10 @@ export default function LeaderboardPage() {
                     {player.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate">{player.name}</p>
+                    <p className="font-semibold truncate">{getDisplayName(player)}</p>
+                    {nameFrequency[player.name] > 1 && (
+                      <p className="text-[11px] text-blue-300">Common name</p>
+                    )}
                     <p className="text-xs text-zinc-500">{player.total_matches} matches</p>
                   </div>
                   <div className="text-right">

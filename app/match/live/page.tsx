@@ -1,22 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  RotateCcw, ChevronRight, Mic2, BarChart2, BookOpen, Target,
-} from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { useMatchStore } from '@/store/matchStore'
-import {
-  computeCRR, computeRRR, formatOvers, getOverSummaries,
-  computeWinProbability, BALLS_PER_OVER,
-} from '@/scoring/engine'
+import { computeCRR, computeRRR, formatOvers, getOverSummaries, BALLS_PER_OVER } from '@/scoring/engine'
 import WicketModal from '@/components/modals/WicketModal'
 import SelectBatsmanModal from '@/components/modals/SelectBatsmanModal'
 import SelectBowlerModal from '@/components/modals/SelectBowlerModal'
 import RetireModal from '@/components/modals/RetireModal'
 import InningsBreakScreen from '@/components/match/InningsBreakScreen'
-import type { Player, BallType } from '@/types'
+import type { BallType } from '@/types'
 
 type TabKey = 'score' | 'overs' | 'batting' | 'commentary'
 
@@ -42,15 +37,16 @@ const SCORE_BUTTONS: Array<{
 
 export default function LiveMatchPage() {
   const router = useRouter()
-  const { match, recordBall, undoLastBall, setOpeningBatsmen, setBowler, completeInnings, completeMatch } = useMatchStore()
+  const { match, recordBall, undoLastBall, setOpeningBatsmen, replaceBatsman, setBowler, completeInnings, completeMatch, clearMatch } = useMatchStore()
 
   const [activeTab, setActiveTab] = useState<TabKey>('score')
   const [showWicketModal, setShowWicketModal] = useState(false)
   const [showBatsmanModal, setShowBatsmanModal] = useState(false)
   const [showBowlerModal, setShowBowlerModal] = useState(false)
   const [showRetireModal, setShowRetireModal] = useState(false)
+  const [pendingRetiredPlayerId, setPendingRetiredPlayerId] = useState<string | null>(null)
+  const [pendingBounce, setPendingBounce] = useState(false)
   const [lastBallFlash, setLastBallFlash] = useState<string | null>(null)
-  const [pendingBall, setPendingBall] = useState<{ type: BallType; runs: number } | null>(null)
 
   useEffect(() => {
     if (!match) { router.push('/'); return }
@@ -85,12 +81,46 @@ export default function LiveMatchPage() {
     innings.score.wickets >= (match.rules.max_players - 1)
   )
 
-  const isMatchWon = match.innings === 2 && match.target &&
-    innings.score.runs >= match.target
-
   function handleScoreButton(type: BallType, runs: number) {
+    if (type === 'bounce') {
+      setPendingBounce(true)
+      return
+    }
+
+    if (pendingBounce) {
+      if (type === 'wicket') {
+        setPendingBounce(false)
+        setShowWicketModal(true)
+        return
+      }
+
+      const allowedAfterBounce = type === 'dot' || type === 'run' || type === 'four' || type === 'six'
+      if (!allowedAfterBounce) return
+
+      const bounceRuns =
+        type === 'four' ? 4 :
+        type === 'six' ? 6 :
+        type === 'dot' ? 0 : runs
+
+      flashBall('bounce', bounceRuns)
+      recordBall('bounce', bounceRuns)
+      setPendingBounce(false)
+
+      setTimeout(() => {
+        const latestMatch = useMatchStore.getState().match
+        const current = latestMatch?.current_innings
+        if (!current) return
+        const overs = current.score.full_overs >= latestMatch.rules.max_overs
+        const allOut = current.score.wickets >= (latestMatch.rules.max_players - 1)
+        if (overs || allOut) {
+          if (latestMatch.innings === 1) completeInnings()
+          else handleEndMatch()
+        }
+      }, 100)
+      return
+    }
+
     if (type === 'wicket') {
-      setPendingBall({ type, runs })
       setShowWicketModal(true)
       return
     }
@@ -100,12 +130,13 @@ export default function LiveMatchPage() {
 
     // Check innings completion
     setTimeout(() => {
-      const current = useMatchStore.getState().match?.current_innings
+      const latestMatch = useMatchStore.getState().match
+      const current = latestMatch?.current_innings
       if (!current) return
-      const overs = current.score.full_overs >= match.rules.max_overs
-      const allOut = current.score.wickets >= (match.rules.max_players - 1)
+      const overs = current.score.full_overs >= latestMatch.rules.max_overs
+      const allOut = current.score.wickets >= (latestMatch.rules.max_players - 1)
       if (overs || allOut) {
-        if (match.innings === 1) completeInnings()
+        if (latestMatch.innings === 1) completeInnings()
         else handleEndMatch()
       }
     }, 100)
@@ -118,14 +149,31 @@ export default function LiveMatchPage() {
   }
 
   function handleEndMatch() {
-    const inn1 = match.innings1.score.runs
-    const inn2 = match.current_innings.score.runs
+    const latestMatch = useMatchStore.getState().match
+    if (!latestMatch) return
+    const inn1 = latestMatch.innings1.score.runs
+    const inn2 = latestMatch.current_innings.score.runs
     if (inn2 >= inn1 + 1) {
-      completeMatch('team_b_won', match.innings2?.batting_team.id)
+      completeMatch('team_b_won', latestMatch.innings2?.batting_team.id)
     } else {
-      completeMatch('team_a_won', match.innings1.batting_team.id)
+      completeMatch('team_a_won', latestMatch.innings1.batting_team.id)
     }
     router.push('/match/summary')
+  }
+
+  async function handleDisbandMatch() {
+    if (!match) return
+    const ok = window.confirm('Disband this match? It will not be saved in history.')
+    if (!ok) return
+
+    try {
+      await fetch(`/api/matches/${match.id}`, { method: 'DELETE' })
+    } catch {
+      // Best-effort cleanup; local disband should still proceed.
+    }
+
+    clearMatch()
+    router.push('/')
   }
 
   if (isInningsBreak) {
@@ -152,12 +200,20 @@ export default function LiveMatchPage() {
           <span className="text-xs text-zinc-500">
             Innings {match.innings} • {innings.batting_team.name} batting
           </span>
-          <button
-            onClick={() => setShowRetireModal(true)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Retire
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowRetireModal(true)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Retire
+            </button>
+            <button
+              onClick={handleDisbandMatch}
+              className="text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              Disband
+            </button>
+          </div>
         </div>
 
         {/* Main score */}
@@ -211,7 +267,7 @@ export default function LiveMatchPage() {
                 {ball.type === 'wicket' ? 'W' :
                  ball.type === 'wide' ? 'Wd' :
                  ball.type === 'no_ball' ? 'NB' :
-                 ball.type === 'bounce' ? 'B' :
+                 ball.type === 'bounce' ? `B${ball.runs > 0 ? ball.runs : ''}` :
                  ball.runs || '•'}
               </div>
             ))}
@@ -350,7 +406,7 @@ export default function LiveMatchPage() {
                           {ball.type === 'wicket' ? 'W' :
                            ball.type === 'wide' ? 'Wd' :
                            ball.type === 'no_ball' ? 'NB' :
-                           ball.type === 'bounce' ? 'B' :
+                           ball.type === 'bounce' ? `B${ball.runs > 0 ? ball.runs : ''}` :
                            ball.runs || '•'}
                         </div>
                       ))}
@@ -452,6 +508,11 @@ export default function LiveMatchPage() {
 
       {/* Scoring Keypad */}
       <div className="bg-surface-900 border-t border-white/5 p-3 pb-6">
+        {pendingBounce && (
+          <div className="mb-2 px-3 py-2 rounded-xl bg-purple-900/35 border border-purple-600/40 text-xs text-purple-200">
+            Bounce selected. Now tap the runs scored on this same ball.
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2 mb-2">
           {SCORE_BUTTONS.slice(0, 6).map(btn => (
             <motion.button
@@ -471,7 +532,7 @@ export default function LiveMatchPage() {
           {/* Wicket */}
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={() => { setPendingBall({ type: 'wicket', runs: 0 }); setShowWicketModal(true) }}
+            onClick={() => handleScoreButton('wicket', 0)}
             disabled={needsOpeningBatsmen || needsBowler}
             className="score-btn py-3 bg-red-800 hover:bg-red-700 text-white rounded-2xl disabled:opacity-30 col-span-1"
           >
@@ -537,7 +598,7 @@ export default function LiveMatchPage() {
           rules={match.rules}
           onConfirm={(wicketType, outPlayerId, replacementPlayer, fielder, runs) => {
             setShowWicketModal(false)
-            recordBall('wicket', runs, {
+            recordBall('wicket', runs ?? 0, {
               wicketType,
               fielderId: fielder?.id,
               replacementPlayer,
@@ -554,9 +615,19 @@ export default function LiveMatchPage() {
           isOpening={needsOpeningBatsmen}
           onSelect={(striker, nonStriker) => {
             setShowBatsmanModal(false)
-            if (nonStriker) setOpeningBatsmen(striker, nonStriker)
+            if (needsOpeningBatsmen && nonStriker) {
+              setOpeningBatsmen(striker, nonStriker)
+              return
+            }
+            if (pendingRetiredPlayerId) {
+              replaceBatsman(pendingRetiredPlayerId, striker)
+              setPendingRetiredPlayerId(null)
+            }
           }}
-          onClose={() => setShowBatsmanModal(false)}
+          onClose={() => {
+            setShowBatsmanModal(false)
+            setPendingRetiredPlayerId(null)
+          }}
         />
       )}
 
@@ -576,6 +647,10 @@ export default function LiveMatchPage() {
         <RetireModal
           match={match}
           innings={innings}
+          onRetired={(retiredPlayerId) => {
+            setPendingRetiredPlayerId(retiredPlayerId)
+            setShowBatsmanModal(true)
+          }}
           onClose={() => setShowRetireModal(false)}
         />
       )}

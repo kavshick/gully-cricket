@@ -1,13 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ChevronLeft, Moon, Sun, LogOut, Bell, Volume2 } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useSettingsStore } from '@/store/settingsStore'
-import { createClient } from '@/supabase/client'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -28,23 +24,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 }
 
 export default function SettingsPage() {
-  const router = useRouter()
   const { defaultRules, updateDefaultRules, soundEnabled, toggleSound } = useSettingsStore()
-  const [signingOut, setSigningOut] = useState(false)
-
-  async function handleSignOut() {
-    setSigningOut(true)
-    try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-      toast.success('Signed out')
-      router.push('/login')
-    } catch {
-      toast.error('Sign out failed')
-    } finally {
-      setSigningOut(false)
-    }
-  }
 
   const sections = [
     {
@@ -144,28 +124,6 @@ export default function SettingsPage() {
             <div className="flex justify-between text-xs text-zinc-600 mt-1">
               <span>1</span><span>20 overs</span>
             </div>
-          </div>
-        </div>
-
-        {/* Account */}
-        <div>
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Account</h2>
-          <div className="space-y-2">
-            <Link href="/login">
-              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-                <span className="text-sm font-medium">Sign In / Register</span>
-                <ChevronLeft size={16} className="rotate-180 text-zinc-500" />
-              </div>
-            </Link>
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="w-full p-4 rounded-2xl bg-red-900/20 border border-red-800/30 text-red-400 font-semibold text-sm flex items-center justify-center gap-2"
-            >
-              <LogOut size={16} />
-              {signingOut ? 'Signing out...' : 'Sign Out'}
-            </motion.button>
           </div>
         </div>
 

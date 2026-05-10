@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/supabase/server'
-import { updatePlayerAIScore } from '@/balancing/engine'
+import { createServiceRoleClient } from '@/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const supabase = createServiceRoleClient()
 
     const { match } = await request.json()
 
@@ -15,7 +12,7 @@ export async function POST(request: NextRequest) {
       .from('matches')
       .upsert({
         id: match.id,
-        user_id: user.id,
+        user_id: null,
         state: match,
         status: match.status,
         team_a_name: match.team_a?.name,
@@ -31,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     // If match completed, update player stats
     if (match.status === 'completed') {
-      await updatePlayerStatsAfterMatch(supabase, match, user.id)
+      await updatePlayerStatsAfterMatch(supabase, match)
     }
 
     return NextResponse.json({ success: true, match_id: data.id })
@@ -40,7 +37,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function updatePlayerStatsAfterMatch(supabase: any, match: any, userId: string) {
+async function updatePlayerStatsAfterMatch(supabase: any, match: any) {
   try {
     const allPlayers = [
       ...match.team_a.players,
@@ -82,7 +79,6 @@ async function updatePlayerStatsAfterMatch(supabase: any, match: any, userId: st
       await supabase
         .from('players')
         .update({
-          total_runs: supabase.rpc ? undefined : undefined, // Updated below
           matches_played: player.matches_played + 1,
           total_runs: player.total_runs + runsScored,
           total_wickets: player.total_wickets + wicketsTaken,
@@ -90,7 +86,6 @@ async function updatePlayerStatsAfterMatch(supabase: any, match: any, userId: st
           losses: player.losses + (won ? 0 : 1),
         })
         .eq('id', player.id)
-        .eq('user_id', userId)
     }
   } catch (err) {
     console.error('Failed to update player stats:', err)

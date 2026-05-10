@@ -3,18 +3,20 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Search, ChevronLeft, Filter } from 'lucide-react'
+import { Plus, Search, ChevronLeft, Filter, Trash2 } from 'lucide-react'
 import { usePlayerStore } from '@/store/playerStore'
 import PlayerCard from '@/components/player/PlayerCard'
+import { toast } from 'sonner'
 import type { Player } from '@/types'
 
 type SortKey = 'name' | 'runs' | 'wickets' | 'matches' | 'ai_score'
 
 export default function PlayersPage() {
-  const { players, fetchPlayers, isLoading } = usePlayerStore()
+  const { players, fetchPlayers, isLoading, deletePlayer } = usePlayerStore()
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('name')
   const [showSort, setShowSort] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => { fetchPlayers() }, [])
 
@@ -40,6 +42,20 @@ export default function PlayersPage() {
     { key: 'matches', label: 'Most Matches' },
     { key: 'ai_score', label: 'AI Score' },
   ]
+
+  async function handleDelete(player: Player) {
+    const ok = window.confirm(`Delete ${player.name}${player.nickname ? ` (${player.nickname})` : ''}?\nThis cannot be undone.`)
+    if (!ok) return
+    setDeletingId(player.id)
+    try {
+      await deletePlayer(player.id)
+      toast.success('Player deleted')
+    } catch {
+      toast.error('Failed to delete player')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface-950 text-white">
@@ -149,10 +165,20 @@ export default function PlayersPage() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
                   transition={{ delay: i * 0.03 }}
+                  className="flex items-stretch gap-2"
                 >
-                  <Link href={`/players/${player.id}`}>
+                  <Link href={`/players/${player.id}`} className="flex-1 min-w-0">
                     <PlayerCard player={player} />
                   </Link>
+                  <button
+                    onClick={() => handleDelete(player)}
+                    disabled={deletingId === player.id}
+                    className="px-3 rounded-2xl bg-red-900/25 border border-red-700/40 text-red-300 hover:bg-red-900/35 transition-colors disabled:opacity-50"
+                    aria-label={`Delete ${player.name}`}
+                    title="Delete player"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </motion.div>
               ))}
             </AnimatePresence>
